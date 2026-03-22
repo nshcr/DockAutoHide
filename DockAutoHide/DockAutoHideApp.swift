@@ -34,4 +34,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   {
     return false
   }
+
+  func applicationShouldTerminate(_ sender: NSApplication)
+    -> NSApplication.TerminateReply
+  {
+    dockManager.restoreManualAutoHideOnQuit()
+    return .terminateNow
+  }
 }

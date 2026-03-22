@@ -107,6 +107,35 @@ final class DockManager: ObservableObject {
     }
   }
 
+  func restoreManualAutoHideOnQuit() {
+    guard isAuthorized else { return }
+
+    stopSmartMode()
+    cancelPendingApply()
+
+    let desired = manualAutoHideEnabled
+    if currentAutoHideEnabled == desired {
+      DockLogger.log(
+        "Quit restore skipped: already \(desired), source=manual, reason=appTerminate"
+      )
+      return
+    }
+
+    let success = automationService.setAutoHide(desired)
+    if success {
+      currentAutoHideEnabled = desired
+      lastErrorMessage = nil
+      DockLogger.log(
+        "Quit restore success: autohide=\(desired), source=manual, reason=appTerminate"
+      )
+    } else {
+      lastErrorMessage = "Failed to restore Dock auto-hide before quitting."
+      DockLogger.log(
+        "Quit restore failed: autohide=\(desired), source=manual, reason=appTerminate"
+      )
+    }
+  }
+
   private func configureEngine() {
     engine.onDecision = { [weak self] shouldAutoHide, _ in
       guard let self else { return }
