@@ -34,6 +34,8 @@ Feedback is hugely appreciated — especially reports of edge cases.
 
 **Notarization note**: I couldn't complete Apple notarization because identity verification failed during Apple Developer Program enrollment. The CI is prepared to sign and notarize builds, but until notarization is finished all downloaded builds will be treated as unsafe by macOS. If that happens you can allow the app via **System Settings → Privacy & Security → Open Anyway**.
 
+<img width="700" height="192" src="https://github.com/user-attachments/assets/04f5a735-1934-43d3-ac85-184d22f05c59" />
+
 If you'd prefer to avoid that altogether, building from source is the safest option. For advanced users who understand the risks, the quarantine attribute can be removed (for example with `xattr -rd com.apple.quarantine /Applications/DockAutoHide.app`), but please only do this if you know what it means.
 
 ### Option A: GitHub Releases (DMG, Apple Silicon + Intel)
