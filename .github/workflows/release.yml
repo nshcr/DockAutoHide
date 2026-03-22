@@ -1,0 +1,139 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "SemVer for MARKETING_VERSION (e.g. 1.2.3 or 1.2.3-beta.1)"
+        required: true
+      sign:
+        description: "Enable code signing step (if false, signing and notarization are skipped)"
+        required: false
+        default: true
+        type: boolean
+      notarize:
+        description: "Enable notarization step (requires signing)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: DockAutoHide
+  SCHEME: DockAutoHide
+  PROJECT: DockAutoHide.xcodeproj
+  BUILD_NUMBER: ${{ github.run_number }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm64
+          - x86_64
+          - universal
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve version
+        env:
+          MARKETING_VERSION_INPUT: ${{ inputs.marketing_version }}
+        run: bash scripts/ci/resolve_version.sh
+
+      - name: Resolve build arch
+        run: bash scripts/ci/resolve_arch.sh "${{ matrix.arch }}"
+
+      - name: Update version settings (local)
+        run: python3 scripts/ci/update_version_settings.py
+
+      - name: Ensure signing secrets
+        if: ${{ inputs.sign == true }}
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        run: bash scripts/ci/ensure_signing_secrets.sh
+
+      - name: Setup signing keychain
+        if: ${{ inputs.sign == true }}
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: bash scripts/ci/setup_keychain.sh
+
+      - name: Archive (signed) (${{ matrix.arch }})
+        if: ${{ inputs.sign == true }}
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        run: bash scripts/ci/archive.sh "${{ matrix.arch }}"
+
+      - name: Archive (unsigned) (${{ matrix.arch }})
+        if: ${{ inputs.sign != true }}
+        run: bash scripts/ci/archive.sh "${{ matrix.arch }}"
+
+      - name: Verify signature
+        if: ${{ inputs.sign == true }}
+        run: bash scripts/ci/verify_signature.sh
+
+      - name: Create DMG
+        env:
+          ARCH_LABEL: ${{ matrix.arch }}
+        run: bash scripts/ci/create_dmg.sh
+
+      - name: Notarize DMG
+        if: ${{ inputs.sign == true && inputs.notarize == true }}
+        env:
+          APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+          APPLE_NOTARIZATION_ISSUER_ID: ${{ secrets.APPLE_NOTARIZATION_ISSUER_ID }}
+          APPLE_NOTARIZATION_PRIVATE_KEY: ${{ secrets.APPLE_NOTARIZATION_PRIVATE_KEY }}
+        run: bash scripts/ci/notarize_dmg.sh "$DMG_PATH"
+
+      - name: Create DMG checksum
+        run: bash scripts/ci/create_dmg_checksum.sh "$DMG_PATH"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: dist-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Release
+    runs-on: macos-26
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve version
+        env:
+          MARKETING_VERSION_INPUT: ${{ inputs.marketing_version }}
+        run: bash scripts/ci/resolve_version.sh
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create combined checksums
+        run: bash scripts/ci/create_checksums.sh
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/create_github_release.sh
