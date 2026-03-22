@@ -18,11 +18,12 @@ final class DockWindowOverlapEvaluator {
 
   func evaluate() -> DockOverlapDecision? {
     let windows = windowList()
-    let dockFrameFromWindow = dockFrame(from: windows)
-    let dockFrame = dockFrameFromWindow ?? dockFrameFromPreferences()
-    let source = dockFrameFromWindow != nil ? "dockWindow" : "prefsFallback"
-
-    guard let dockFrame else {
+    let decisionInput: (dockFrames: [CGRect], source: String)
+    if let dockFrame = dockFrame(from: windows) {
+      decisionInput = ([dockFrame], "dockWindow")
+    } else if let fallbackDockFrame = dockFrameFromPreferences() {
+      decisionInput = ([fallbackDockFrame], "prefsFallback")
+    } else {
       if !loggedMissingDockFrame {
         DockLogger.log("No dock frame available; skipping smart evaluation")
         loggedMissingDockFrame = true
@@ -31,16 +32,19 @@ final class DockWindowOverlapEvaluator {
     }
     loggedMissingDockFrame = false
 
-    let overlaps = windowOverlapsDock(windows: windows, dockFrame: dockFrame)
+    let overlaps = windowOverlapsDock(
+      windows: windows,
+      dockFrames: decisionInput.dockFrames
+    )
     if overlaps {
       return DockOverlapDecision(
         shouldAutoHide: true,
-        reason: "windowOverlap:\(source)"
+        reason: "windowOverlap:\(decisionInput.source)"
       )
     }
     return DockOverlapDecision(
       shouldAutoHide: false,
-      reason: "noOverlap:\(source)"
+      reason: "noOverlap:\(decisionInput.source)"
     )
   }
 
@@ -141,7 +145,10 @@ final class DockWindowOverlapEvaluator {
     return nil
   }
 
-  private func windowOverlapsDock(windows: [[String: Any]], dockFrame: CGRect)
+  private func windowOverlapsDock(
+    windows: [[String: Any]],
+    dockFrames: [CGRect]
+  )
     -> Bool
   {
     let ignoredOwners: Set<String> = [
@@ -176,7 +183,7 @@ final class DockWindowOverlapEvaluator {
       guard let bounds = windowBounds(window) else {
         continue
       }
-      if bounds.intersects(dockFrame) {
+      if dockFrames.contains(where: { bounds.intersects($0) }) {
         return true
       }
     }
@@ -185,10 +192,11 @@ final class DockWindowOverlapEvaluator {
 
   private func dockFrameFromPreferences() -> CGRect? {
     let displayBounds: CGRect
-    if let main = NSScreen.main ?? NSScreen.screens.first {
+    if let preferredScreen = preferredScreenForDockFallback() {
+      let mainReferenceScreen = NSScreen.main ?? preferredScreen
       displayBounds = convertToWindowCoordinates(
-        main.frame,
-        mainMaxY: main.frame.maxY
+        preferredScreen.frame,
+        mainMaxY: mainReferenceScreen.frame.maxY
       )
     } else {
       displayBounds = CGDisplayBounds(CGMainDisplayID())
@@ -220,6 +228,22 @@ final class DockWindowOverlapEvaluator {
         height: thickness
       )
     }
+  }
+
+  private func preferredScreenForDockFallback() -> NSScreen? {
+    let screens = NSScreen.screens
+    guard !screens.isEmpty else {
+      return nil
+    }
+
+    let mouseLocation = NSEvent.mouseLocation
+    if let pointerScreen = screens.first(where: { screen in
+      screen.frame.contains(mouseLocation)
+    }) {
+      return pointerScreen
+    }
+
+    return NSScreen.main ?? screens.first
   }
 
   private func windowBounds(_ window: [String: Any]) -> CGRect? {
