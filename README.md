@@ -74,14 +74,20 @@ brew install --cask dockautohide
 
 ## Permissions
 
-DockAutoHide needs the following permissions to function correctly:
+DockAutoHide uses two macOS permission areas:
 
-- **Automation (System Events)**: required to read and toggle Dock auto-hide via Apple Events.
-- **Screen Recording**: recommended for accurate window overlap detection in Smart Switching.
+- **Automation (System Events)**: required. The app uses Apple Events to read and toggle Dock auto-hide. Without this permission, DockAutoHide cannot control the Dock.
+- **Screen Recording**: optional, but recommended for best Smart Switching behavior. It helps macOS provide more accurate window metadata for overlap detection.
 
-The app does **not** proactively request Screen Recording permission. If you want the most accurate Smart Switching, add DockAutoHide manually in **System Settings → Privacy & Security → Screen Recording**.
+The app does **not** proactively request Screen Recording permission. If you want the best Smart Switching accuracy, add DockAutoHide manually in **System Settings → Privacy & Security → Screen Recording**.
 
-Without Screen Recording permission, the app still works, but Smart Switching may fall back to Dock preference heuristics and be less accurate.
+Without Screen Recording permission, DockAutoHide still works in the vast majority of setups:
+
+- Manual Dock auto-hide control still works normally.
+- Smart Switching still works, but may use a fallback based on Dock preferences and the current display context instead of the live Dock window frame.
+- In more complex setups, especially some multi-display arrangements, Smart Switching can be a little less precise.
+
+In short: enabling Screen Recording gives DockAutoHide its best behavior, but leaving it disabled should still be good enough for most everyday use.
 
 ## Privacy
 
