@@ -6,6 +6,8 @@ DockAutoHide is a tiny macOS menu bar utility that watches for windows overlappi
 
 ## Demo Video
 
+https://github.com/user-attachments/assets/2f6a8341-6084-4d71-a310-c60caff6d269
+
 ## Why You Might Want This
 
 - You keep the Dock visible for quick app switching, but hate losing content space when windows touch the screen edge.
