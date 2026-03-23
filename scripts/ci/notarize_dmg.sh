@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-DMG_PATH="${1:-}"
+DMG_PATH="${1:-${DMG_PATH:-}}"
 if [[ -z "${DMG_PATH}" ]]; then
-  echo "Usage: notarize_dmg.sh <dmg-path>"
+  ci_usage_with_env "<dmg-path>" "DMG_PATH"
   exit 1
 fi
+
+ci_require_env "RUNNER_TEMP"
+ci_require_file "${DMG_PATH}" "DMG not found"
 
 missing=()
 [[ -z "${APPLE_NOTARIZATION_KEY_ID:-}" ]] && missing+=("APPLE_NOTARIZATION_KEY_ID")
@@ -13,9 +17,9 @@ missing=()
 [[ -z "${APPLE_NOTARIZATION_PRIVATE_KEY:-}" ]] && missing+=("APPLE_NOTARIZATION_PRIVATE_KEY")
 
 if (( ${#missing[@]} > 0 )); then
-  echo "Missing notarization secrets:"
+  echo "Missing required notarization secrets:" >&2
   for item in "${missing[@]}"; do
-    echo "  ${item}"
+    echo "  ${item}" >&2
   done
   exit 1
 fi

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 TAP_PATH="${1:-homebrew-tap}"
 VERSION="${2:-${MARKETING_VERSION:-}}"
@@ -7,15 +8,11 @@ SOURCE_CASK_PATH="${3:-dist/dockautohide.rb}"
 TARGET_CASK_PATH="${TAP_PATH}/Casks/dockautohide.rb"
 
 if [[ -z "${VERSION}" ]]; then
-  echo "Usage: update_homebrew_tap.sh <tap-path> <version> [source-cask-path]"
-  echo "Or set MARKETING_VERSION in the environment."
+  ci_usage_with_env "<tap-path> <version> [source-cask-path]" "MARKETING_VERSION"
   exit 1
 fi
 
-if [[ ! -f "${SOURCE_CASK_PATH}" ]]; then
-  echo "Source cask not found: ${SOURCE_CASK_PATH}"
-  exit 1
-fi
+ci_require_file "${SOURCE_CASK_PATH}" "Source cask not found"
 
 mkdir -p "${TAP_PATH}/Casks"
 cp "${SOURCE_CASK_PATH}" "${TARGET_CASK_PATH}"

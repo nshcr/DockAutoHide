@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+ci_require_env "RUNNER_TEMP"
+ci_require_env "MACOS_CERTIFICATE_PASSWORD"
 
 KEYCHAIN_PASSWORD="${MACOS_KEYCHAIN_PASSWORD:-$(uuidgen)}"
 KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
 
-{
-  echo "KEYCHAIN_PATH=${KEYCHAIN_PATH}"
-  echo "KEYCHAIN_PASSWORD=${KEYCHAIN_PASSWORD}"
-} >> "${GITHUB_ENV}"
+ci_write_github_env "KEYCHAIN_PATH" "${KEYCHAIN_PATH}"
+ci_write_github_env "KEYCHAIN_PASSWORD" "${KEYCHAIN_PASSWORD}"
 
 python3 scripts/ci/write_p12_from_base64.py "$RUNNER_TEMP/cert.p12"
 

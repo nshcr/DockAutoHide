@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-ARCH="${1:-}"
+ARCH="${1:-${ARCH_LABEL:-}}"
+
+if [[ -z "${ARCH}" ]]; then
+  ci_usage_with_env "<arch-label>" "ARCH_LABEL"
+  exit 1
+fi
 
 case "${ARCH}" in
   arm64) ARCHS="arm64" ;;
@@ -10,4 +16,4 @@ case "${ARCH}" in
   *) echo "Unsupported arch: ${ARCH}"; exit 1 ;;
 esac
 
-echo "ARCHS=${ARCHS}" >> "${GITHUB_ENV}"
+ci_write_github_env "ARCHS" "${ARCHS}"
