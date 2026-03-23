@@ -32,24 +32,40 @@ Feedback is hugely appreciated — especially reports of edge cases.
 
 ## Installation
 
-**Notarization note**: I couldn't complete Apple notarization because identity verification failed during Apple Developer Program enrollment. The CI is prepared to sign and notarize builds, but until notarization is finished all downloaded builds will be treated as unsafe by macOS. If that happens you can allow the app via **System Settings → Privacy & Security → Open Anyway**.
+**Security note**: I haven't been able to complete Apple notarization yet because Apple Developer Program identity verification is currently failing during enrollment. Until notarization is available, macOS may treat downloaded builds as untrusted.
+
+In practice, that means:
+
+- The first launch may require **System Settings → Privacy & Security → Open Anyway**.
+- Installing a newer version may trigger the same prompt again, because each downloaded update can be evaluated separately by Gatekeeper.
 
 <img width="700" height="192" src="https://github.com/user-attachments/assets/04f5a735-1934-43d3-ac85-184d22f05c59" />
 
-If you'd prefer to avoid that altogether, building from source is the safest option. For advanced users who understand the risks, the quarantine attribute can be removed (for example with `xattr -rd com.apple.quarantine /Applications/DockAutoHide.app`), but please only do this if you know what it means.
+If you'd prefer to avoid that altogether, building from source is the safest option. For advanced users who understand the risks, you can also remove the quarantine attribute manually:
 
-### Option A: GitHub Releases (DMG, Apple Silicon + Intel)
+```sh
+xattr -rd com.apple.quarantine /Applications/DockAutoHide.app
+```
+
+Only do this if you understand the security tradeoff.
+
+### Option A: Homebrew Tap (Recommended)
+
+```sh
+brew tap nshcr/tap
+brew install --cask dockautohide
+```
+
+- This is the recommended installation method.
+- Homebrew installs the app from the dedicated [nshcr/homebrew-tap](https://github.com/nshcr/homebrew-tap) repository.
+- It gives the smoothest install and upgrade workflow available right now, even though notarization is still pending.
+
+### Option B: GitHub Releases (DMG, Apple Silicon + Intel)
 
 - Releases are built by [GitHub Actions](https://github.com/nshcr/DockAutoHide/actions/workflows/release.yml) and published as architecture‑specific DMGs.
 - Download the DMG that matches your Mac architecture from [GitHub Releases](https://github.com/nshcr/DockAutoHide/releases).
 - Open the DMG and drag `DockAutoHide.app` into `/Applications`.
-- Launch the app and grant permissions when prompted.
-
-### Option B: Homebrew (coming soon)
-
-```sh
-brew install --cask dockautohide
-```
+- Launch the app and use **Open Anyway** if macOS blocks it.
 
 ### Option C: Build from source
 
