@@ -134,3 +134,41 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/ci/create_github_release.sh
+
+  update_homebrew_tap:
+    name: Update Homebrew Tap
+    runs-on: macos-26
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve version
+        env:
+          MARKETING_VERSION_INPUT: ${{ inputs.marketing_version }}
+        run: bash scripts/ci/resolve_version.sh
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create Homebrew Cask
+        run: bash scripts/ci/create_homebrew_cask.sh "$MARKETING_VERSION"
+
+      - name: Verify current workflow release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/verify_github_release.sh "$RELEASE_TAG" "$GITHUB_REPOSITORY"
+
+      - name: Checkout homebrew tap
+        uses: actions/checkout@v6
+        with:
+          repository: nshcr/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update homebrew tap cask
+        run: bash scripts/ci/update_homebrew_tap.sh homebrew-tap "$MARKETING_VERSION"
