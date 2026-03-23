@@ -27,9 +27,27 @@ env:
   BUILD_NUMBER: ${{ github.run_number }}
 
 jobs:
+  preflight:
+    name: Preflight
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve version
+        env:
+          MARKETING_VERSION_INPUT: ${{ inputs.marketing_version }}
+        run: bash scripts/ci/resolve_version.sh
+
+      - name: Validate immutable release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/check_release_publish_state.sh
+
   build:
     name: Build (${{ matrix.arch }})
     runs-on: macos-26
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +124,7 @@ jobs:
           name: dist-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
+          overwrite: true
 
   release:
     name: Release
