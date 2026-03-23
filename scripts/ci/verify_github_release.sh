@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 RELEASE_TAG="${1:-${RELEASE_TAG:-}}"
 REPOSITORY="${2:-${GITHUB_REPOSITORY:-}}"
 
 if [[ -z "${RELEASE_TAG}" ]]; then
-  echo "Usage: verify_github_release.sh <release-tag> [repository]"
-  echo "Or set RELEASE_TAG in the environment."
+  ci_usage_with_env "<release-tag> [repository]" "RELEASE_TAG"
   exit 1
 fi
 
 if [[ -z "${REPOSITORY}" ]]; then
-  echo "Missing repository. Pass it as the second argument or set GITHUB_REPOSITORY."
+  echo "Missing GITHUB_REPOSITORY" >&2
   exit 1
 fi
 

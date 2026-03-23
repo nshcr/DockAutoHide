@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 MARKETING_VERSION_INPUT="${MARKETING_VERSION_INPUT:-}"
 
@@ -16,22 +17,20 @@ else
 fi
 
 if [[ -z "${RELEASE_TAG}" ]]; then
-  echo "Missing RELEASE_TAG"
+  echo "Missing RELEASE_TAG" >&2
   exit 1
 fi
 
 if [[ ! "${RELEASE_TAG}" =~ ^v.+$ ]]; then
-  echo "Invalid tag format: ${RELEASE_TAG}"
+  echo "Invalid tag format: ${RELEASE_TAG}" >&2
   exit 1
 fi
 
 if [[ ! "${MARKETING_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-  echo "Invalid MARKETING_VERSION: ${MARKETING_VERSION}"
-  echo "Expected SemVer without build metadata. Example: 1.2.3 or 1.2.3-beta.1"
+  echo "Invalid MARKETING_VERSION: ${MARKETING_VERSION}" >&2
+  echo "Expected SemVer without build metadata. Example: 1.2.3 or 1.2.3-beta.1" >&2
   exit 1
 fi
 
-{
-  echo "MARKETING_VERSION=${MARKETING_VERSION}"
-  echo "RELEASE_TAG=${RELEASE_TAG}"
-} >> "${GITHUB_ENV}"
+ci_write_github_env "MARKETING_VERSION" "${MARKETING_VERSION}"
+ci_write_github_env "RELEASE_TAG" "${RELEASE_TAG}"

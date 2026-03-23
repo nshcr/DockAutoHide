@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 VERSION="${1:-${MARKETING_VERSION:-}}"
 OUTPUT_PATH="${2:-dist/dockautohide.rb}"
 
 if [[ -z "${VERSION}" ]]; then
-  echo "Usage: create_homebrew_cask.sh <version> [output-path]"
-  echo "Or set MARKETING_VERSION in the environment."
+  ci_usage_with_env "<version> [output-path]" "MARKETING_VERSION"
   exit 1
 fi
 
 SHA_FILE="dist/DockAutoHide-${VERSION}-universal.dmg.sha256"
-if [[ ! -f "${SHA_FILE}" ]]; then
-  echo "Missing checksum file: ${SHA_FILE}"
-  exit 1
-fi
+ci_require_file "${SHA_FILE}" "Checksum file not found"
 
 SHA256="$(awk '{print $1}' "${SHA_FILE}")"
 

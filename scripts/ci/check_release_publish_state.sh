@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-if [[ -z "${RELEASE_TAG:-}" ]]; then
-  echo "Missing RELEASE_TAG"
-  exit 1
-fi
-
-if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
-  echo "Missing GITHUB_REPOSITORY"
-  exit 1
-fi
+ci_require_env "RELEASE_TAG"
+ci_require_env "GITHUB_REPOSITORY"
 
 RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}"
 

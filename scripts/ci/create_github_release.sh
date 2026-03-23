@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 RELEASE_FILES=(
   dist/*.dmg
@@ -7,10 +8,12 @@ RELEASE_FILES=(
   dist/checksums.txt
 )
 
-if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
-  echo "Missing GITHUB_REPOSITORY"
-  exit 1
-fi
+ci_require_env "RELEASE_TAG"
+ci_require_env "GITHUB_REPOSITORY"
+
+for release_file in "${RELEASE_FILES[@]}"; do
+  ci_require_file "${release_file}" "Release artifact not found"
+done
 
 if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
   echo "Release ${GITHUB_REPOSITORY}@${RELEASE_TAG} already exists. Verifying assets and preserving immutability."

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 if ! ls dist/*.dmg >/dev/null 2>&1; then
-  echo "No DMG files found in dist/"
+  echo "No DMG files found in dist/" >&2
   exit 1
 fi
 

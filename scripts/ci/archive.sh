@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-ARCH_LABEL="${1:-}"
+ARCH_LABEL="${1:-${ARCH_LABEL:-}}"
 if [[ -z "${ARCH_LABEL}" ]]; then
-  echo "Usage: archive.sh <arch-label>"
+  ci_usage_with_env "<arch-label>" "ARCH_LABEL"
   exit 1
 fi
+
+ci_require_env "APP_NAME"
+ci_require_env "PROJECT"
+ci_require_env "SCHEME"
+ci_require_env "RUNNER_TEMP"
+ci_require_env "ARCHS"
+ci_require_env "BUILD_NUMBER"
+ci_require_env "MARKETING_VERSION"
 
 ARCHIVE_PATH="$RUNNER_TEMP/${APP_NAME}-${ARCH_LABEL}.xcarchive"
 
@@ -31,4 +40,4 @@ xcodebuild archive \
   ENABLE_HARDENED_RUNTIME=YES \
   OTHER_CODE_SIGN_FLAGS="--timestamp"
 
-echo "ARCHIVE_PATH=${ARCHIVE_PATH}" >> "${GITHUB_ENV}"
+ci_write_github_env "ARCHIVE_PATH" "${ARCHIVE_PATH}"
