@@ -100,7 +100,7 @@ The app does **not** proactively request Screen Recording permission. If you wan
 Without Screen Recording permission, DockAutoHide still works in the vast majority of setups:
 
 - Manual Dock auto-hide control still works normally.
-- Smart Switching still works, but may use a fallback based on Dock preferences and the current display context instead of the live Dock window frame.
+- Smart Switching still uses live screen geometry and Dock preferences, but may lose some live Dock span metadata and fall back to the current display context.
 - In more complex setups, especially some multi-display arrangements, Smart Switching can be a little less precise.
 
 In short: enabling Screen Recording gives DockAutoHide its best behavior, but leaving it disabled should still be good enough for most everyday use.

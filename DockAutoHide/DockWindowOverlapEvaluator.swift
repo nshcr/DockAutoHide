@@ -8,9 +8,50 @@ struct DockOverlapDecision {
 }
 
 final class DockWindowOverlapEvaluator {
+  private struct ScreenSnapshot {
+    let frameAppKit: CGRect
+    let visibleFrameAppKit: CGRect
+    let frameWindowCoordinates: CGRect
+
+    func inset(for edge: DockEdge) -> CGFloat {
+      switch edge {
+      case .left:
+        return max(0, visibleFrameAppKit.minX - frameAppKit.minX)
+      case .right:
+        return max(0, frameAppKit.maxX - visibleFrameAppKit.maxX)
+      case .bottom:
+        return max(0, visibleFrameAppKit.minY - frameAppKit.minY)
+      }
+    }
+  }
+
+  private enum DockEdge: String {
+    case left
+    case right
+    case bottom
+  }
+
+  private struct DockSpanCandidate {
+    let rawBounds: CGRect
+    let spanRange: ClosedRange<CGFloat>
+    let length: CGFloat
+  }
+
+  private struct DockThicknessCacheKey: Equatable {
+    let edge: DockEdge
+    let screenFrame: CGRect
+    let tileSize: CGFloat
+    let magnificationEnabled: Bool
+    let largeSize: CGFloat
+  }
+
   private let prefsClient: DockPreferencesClient
+  var isDockAutoHideEnabled: () -> Bool = { false }
+
   private var loggedMissingDockFrame: Bool = false
   private var loggedDockCandidates: Bool = false
+  private var cachedVisibleDockThickness: CGFloat?
+  private var cachedThicknessKey: DockThicknessCacheKey?
 
   init(prefsClient: DockPreferencesClient) {
     self.prefsClient = prefsClient
@@ -18,12 +59,7 @@ final class DockWindowOverlapEvaluator {
 
   func evaluate() -> DockOverlapDecision? {
     let windows = windowList()
-    let decisionInput: (dockFrames: [CGRect], source: String)
-    if let dockFrame = dockFrame(from: windows) {
-      decisionInput = ([dockFrame], "dockWindow")
-    } else if let fallbackDockFrame = dockFrameFromPreferences() {
-      decisionInput = ([fallbackDockFrame], "prefsFallback")
-    } else {
+    guard let dockFrame = dockFrame(from: windows) else {
       if !loggedMissingDockFrame {
         DockLogger.log("No dock frame available; skipping smart evaluation")
         loggedMissingDockFrame = true
@@ -34,17 +70,17 @@ final class DockWindowOverlapEvaluator {
 
     let overlaps = windowOverlapsDock(
       windows: windows,
-      dockFrames: decisionInput.dockFrames
+      dockFrames: [dockFrame]
     )
     if overlaps {
       return DockOverlapDecision(
         shouldAutoHide: true,
-        reason: "windowOverlap:\(decisionInput.source)"
+        reason: "windowOverlap:screenVisibleFrame"
       )
     }
     return DockOverlapDecision(
       shouldAutoHide: false,
-      reason: "noOverlap:\(decisionInput.source)"
+      reason: "noOverlap:screenVisibleFrame"
     )
   }
 
@@ -58,10 +94,53 @@ final class DockWindowOverlapEvaluator {
   }
 
   private func dockFrame(from windows: [[String: Any]]) -> CGRect? {
+    let edge = preferredDockEdge()
+    let screenSnapshots = currentScreenSnapshots()
+    guard let dockScreen = preferredDockScreen(
+      for: edge,
+      snapshots: screenSnapshots
+    ) else {
+      return nil
+    }
+
+    synchronizeThicknessCache(edge: edge, screen: dockScreen)
+    let thickness = dockThickness(for: edge, on: dockScreen)
+    let span = dockSpan(
+      from: windows,
+      edge: edge,
+      dockScreen: dockScreen,
+      allScreens: screenSnapshots
+    )
+
+    if !loggedDockCandidates {
+      let visibleInset = dockScreen.inset(for: edge)
+      let cachedThickness = cachedVisibleDockThickness ?? -1
+      DockLogger.log(
+        "Dock geometry: edge=\(edge.rawValue), screen=\(dockScreen.frameWindowCoordinates), visibleInset=\(visibleInset), cachedVisibleThickness=\(cachedThickness), collisionThickness=\(thickness), autoHide=\(isDockAutoHideEnabled())"
+      )
+      if let span {
+        DockLogger.log("Dock span example: \(span.rawBounds)")
+      }
+      loggedDockCandidates = true
+    }
+
+    return dockFrame(
+      edge: edge,
+      screen: dockScreen,
+      thickness: thickness,
+      span: span?.spanRange
+    )
+  }
+
+  private func dockSpan(
+    from windows: [[String: Any]],
+    edge: DockEdge,
+    dockScreen: ScreenSnapshot,
+    allScreens: [ScreenSnapshot]
+  ) -> DockSpanCandidate? {
     let dockWindows = windows.compactMap {
       window -> (
         CGRect,
-        Int,
         Double,
         Bool
       )? in
@@ -73,73 +152,68 @@ final class DockWindowOverlapEvaluator {
       guard let bounds = windowBounds(window) else {
         return nil
       }
-      let layer = window[kCGWindowLayer as String] as? Int ?? 0
       let alpha = window[kCGWindowAlpha as String] as? Double ?? 1.0
       let isOnscreen = window[kCGWindowIsOnscreen as String] as? Bool ?? true
-      return (bounds, layer, alpha, isOnscreen)
+      return (bounds, alpha, isOnscreen)
     }
 
     if dockWindows.isEmpty {
       return nil
     }
 
-    let screenFrames = screenFramesInWindowCoordinates()
     let candidates = dockWindows.compactMap {
       bounds,
-      layer,
       alpha,
       isOnscreen -> (
-        CGRect,
-        CGFloat,
-        CGFloat
+        DockSpanCandidate
       )? in
       guard isOnscreen,
         alpha > 0
       else { return nil }
-      guard let screen = nearestScreen(for: bounds, screens: screenFrames)
-      else {
-        return nil
-      }
       guard
-        let thicknessLength = dockThicknessAndLength(
-          bounds: bounds,
-          screen: screen
-        )
+        let screen = nearestScreen(
+          for: bounds,
+          screens: allScreens.map(\.frameWindowCoordinates)
+        ),
+        screen.equalTo(dockScreen.frameWindowCoordinates)
       else {
         return nil
       }
-      let thickness = thicknessLength.thickness
-      let length = thicknessLength.length
-      if thickness < 20 || thickness > 320 {
+      guard let candidateEdge = dockEdge(for: bounds, screen: screen),
+        candidateEdge == edge
+      else {
         return nil
       }
-      if length < thickness * 2 {
-        return nil
+      let spanRange: ClosedRange<CGFloat>
+      let screenLength: CGFloat
+      switch edge {
+      case .bottom:
+        spanRange = bounds.minX...bounds.maxX
+        screenLength = screen.width
+      case .left, .right:
+        spanRange = bounds.minY...bounds.maxY
+        screenLength = screen.height
       }
-      return (bounds, thickness, length)
-    }
 
-    if !loggedDockCandidates {
-      let count = dockWindows.count
-      let candidateCount = candidates.count
-      DockLogger
-        .log("Dock window candidates: \(count) total, \(candidateCount) usable")
-      if let first = candidates.first {
-        DockLogger
-          .log(
-            "Dock candidate example: frame=\(first.0), thickness=\(first.1), length=\(first.2)"
-          )
+      let length = spanRange.upperBound - spanRange.lowerBound
+      if length < 48 {
+        return nil
       }
-      loggedDockCandidates = true
+      if length >= screenLength * 0.95 {
+        return nil
+      }
+
+      return DockSpanCandidate(
+        rawBounds: bounds,
+        spanRange: spanRange,
+        length: length
+      )
     }
 
     if let best = candidates.sorted(by: { lhs, rhs in
-      if lhs.1 == rhs.1 {
-        return lhs.2 > rhs.2
-      }
-      return lhs.1 < rhs.1
+      lhs.length > rhs.length
     }).first {
-      return best.0
+      return best
     }
 
     return nil
@@ -183,67 +257,108 @@ final class DockWindowOverlapEvaluator {
       guard let bounds = windowBounds(window) else {
         continue
       }
-      if dockFrames.contains(where: { bounds.intersects($0) }) {
+      let effectiveBounds = effectiveWindowBounds(bounds)
+      if dockFrames.contains(where: { effectiveBounds.intersects($0) }) {
         return true
       }
     }
     return false
   }
 
-  private func dockFrameFromPreferences() -> CGRect? {
-    let displayBounds: CGRect
-    if let preferredScreen = preferredScreenForDockFallback() {
-      let mainReferenceScreen = NSScreen.main ?? preferredScreen
-      displayBounds = convertToWindowCoordinates(
-        preferredScreen.frame,
-        mainMaxY: mainReferenceScreen.frame.maxY
-      )
-    } else {
-      displayBounds = CGDisplayBounds(CGMainDisplayID())
-    }
-    let orientation = prefsClient.readOrientation() ?? "bottom"
-    let tileSize = prefsClient.readTileSize() ?? 64.0
-    let thickness = max(36.0, tileSize + 16.0)
-
-    switch orientation {
-    case "left":
+  private func dockFrame(
+    edge: DockEdge,
+    screen: ScreenSnapshot,
+    thickness: CGFloat,
+    span: ClosedRange<CGFloat>?
+  ) -> CGRect {
+    switch edge {
+    case .left:
       return CGRect(
-        x: displayBounds.minX,
-        y: displayBounds.minY,
+        x: screen.frameWindowCoordinates.minX,
+        y: span?.lowerBound ?? screen.frameWindowCoordinates.minY,
         width: thickness,
-        height: displayBounds.height
+        height: span.map { $0.upperBound - $0.lowerBound }
+          ?? screen.frameWindowCoordinates.height
       )
-    case "right":
+    case .right:
       return CGRect(
-        x: displayBounds.maxX - thickness,
-        y: displayBounds.minY,
+        x: screen.frameWindowCoordinates.maxX - thickness,
+        y: span?.lowerBound ?? screen.frameWindowCoordinates.minY,
         width: thickness,
-        height: displayBounds.height
+        height: span.map { $0.upperBound - $0.lowerBound }
+          ?? screen.frameWindowCoordinates.height
       )
-    default:
+    case .bottom:
       return CGRect(
-        x: displayBounds.minX,
-        y: displayBounds.maxY - thickness,
-        width: displayBounds.width,
+        x: span?.lowerBound ?? screen.frameWindowCoordinates.minX,
+        y: screen.frameWindowCoordinates.maxY - thickness,
+        width: span.map { $0.upperBound - $0.lowerBound }
+          ?? screen.frameWindowCoordinates.width,
         height: thickness
       )
     }
   }
 
-  private func preferredScreenForDockFallback() -> NSScreen? {
-    let screens = NSScreen.screens
-    guard !screens.isEmpty else {
-      return nil
+  private func dockThickness(for edge: DockEdge, on screen: ScreenSnapshot)
+    -> CGFloat
+  {
+    let visibleInset = screen.inset(for: edge)
+    if !isDockAutoHideEnabled(),
+      visibleInset > 0
+    {
+      cachedVisibleDockThickness = visibleInset
+      return visibleInset
     }
-
-    let mouseLocation = NSEvent.mouseLocation
-    if let pointerScreen = screens.first(where: { screen in
-      screen.frame.contains(mouseLocation)
-    }) {
-      return pointerScreen
+    if let cachedVisibleDockThickness,
+      cachedVisibleDockThickness > 0
+    {
+      return cachedVisibleDockThickness
     }
+    return expectedVisibleDockThickness()
+  }
 
-    return NSScreen.main ?? screens.first
+  private func synchronizeThicknessCache(edge: DockEdge, screen: ScreenSnapshot) {
+    let cacheKey = DockThicknessCacheKey(
+      edge: edge,
+      screenFrame: screen.frameWindowCoordinates,
+      tileSize: CGFloat(prefsClient.readTileSize() ?? 64.0),
+      magnificationEnabled: prefsClient.readMagnificationEnabled() ?? false,
+      largeSize: CGFloat(
+        prefsClient.readLargeSize()
+          ?? prefsClient.readTileSize()
+          ?? 64.0
+      )
+    )
+
+    if cachedThicknessKey != cacheKey {
+      cachedThicknessKey = cacheKey
+      cachedVisibleDockThickness = nil
+    }
+  }
+
+  private func preferredDockEdge() -> DockEdge {
+    switch prefsClient.readOrientation() ?? "bottom" {
+    case "left":
+      return .left
+    case "right":
+      return .right
+    default:
+      return .bottom
+    }
+  }
+
+  private func preferredDockScreen(
+    for edge: DockEdge,
+    snapshots: [ScreenSnapshot]
+  ) -> ScreenSnapshot? {
+    if let dockScreen = snapshots
+      .map({ (snapshot: $0, inset: $0.inset(for: edge)) })
+      .filter({ $0.inset > 0 })
+      .max(by: { $0.inset < $1.inset })?.snapshot
+    {
+      return dockScreen
+    }
+    return preferredScreenSnapshot(from: snapshots) ?? snapshots.first
   }
 
   private func windowBounds(_ window: [String: Any]) -> CGRect? {
@@ -294,33 +409,104 @@ final class DockWindowOverlapEvaluator {
     return bestArea > 0 ? bestScreen : nil
   }
 
-  private func dockThicknessAndLength(bounds: CGRect, screen: CGRect) -> (
-    thickness: CGFloat, length: CGFloat
-  )? {
+  private func dockEdge(for bounds: CGRect, screen: CGRect) -> DockEdge? {
     let tolerance: CGFloat = 6
-    if abs(bounds.minY - screen.minY) <= tolerance
-      || abs(bounds.maxY - screen.maxY) <= tolerance
-    {
-      return (thickness: bounds.height, length: bounds.width)
+    let leftDistance = abs(bounds.minX - screen.minX)
+    let rightDistance = abs(bounds.maxX - screen.maxX)
+    let bottomDistance = min(
+      abs(bounds.minY - screen.minY),
+      abs(bounds.maxY - screen.maxY)
+    )
+
+    if bounds.height > bounds.width {
+      if leftDistance <= tolerance || rightDistance <= tolerance {
+        return leftDistance <= rightDistance ? .left : .right
+      }
     }
-    if abs(bounds.minX - screen.minX) <= tolerance
-      || abs(bounds.maxX - screen.maxX) <= tolerance
-    {
-      return (thickness: bounds.width, length: bounds.height)
+
+    if bottomDistance <= tolerance {
+      return .bottom
+    }
+    if leftDistance <= tolerance {
+      return .left
+    }
+    if rightDistance <= tolerance {
+      return .right
     }
     return nil
   }
 
-  private func screenFramesInWindowCoordinates() -> [CGRect] {
+  private func expectedVisibleDockThickness() -> CGFloat {
+    let tileSize = CGFloat(prefsClient.readTileSize() ?? 64.0)
+    let magnificationEnabled = prefsClient.readMagnificationEnabled() ?? false
+    let largeSize = CGFloat(prefsClient.readLargeSize() ?? Double(tileSize))
+    let iconSize = magnificationEnabled ? max(tileSize, largeSize) : tileSize
+
+    return min(160.0, max(28.0, iconSize + 12.0))
+  }
+
+  private func effectiveWindowBounds(_ bounds: CGRect) -> CGRect {
+    let insetX = min(6.0, max(0.0, bounds.width / 20.0))
+    let insetY = min(6.0, max(0.0, bounds.height / 20.0))
+    let effectiveBounds = bounds.insetBy(dx: insetX, dy: insetY)
+    if effectiveBounds.isNull || effectiveBounds.isEmpty {
+      return bounds
+    }
+    return effectiveBounds
+  }
+
+  private func currentScreenSnapshots() -> [ScreenSnapshot] {
+    if Thread.isMainThread {
+      return makeScreenSnapshots()
+    }
+
+    var snapshots: [ScreenSnapshot] = []
+    DispatchQueue.main.sync {
+      snapshots = makeScreenSnapshots()
+    }
+    return snapshots
+  }
+
+  private func makeScreenSnapshots() -> [ScreenSnapshot] {
     guard let main = NSScreen.main ?? NSScreen.screens.first else {
       return []
     }
+
     let mainMaxY = main.frame.maxY
-    // CGWindowList uses a global coordinate space with the origin at the top-left
-    // of the main display. Convert NSScreen frames to match that space.
     return NSScreen.screens.map { screen in
-      convertToWindowCoordinates(screen.frame, mainMaxY: mainMaxY)
+      ScreenSnapshot(
+        frameAppKit: screen.frame,
+        visibleFrameAppKit: screen.visibleFrame,
+        frameWindowCoordinates: convertToWindowCoordinates(
+          screen.frame,
+          mainMaxY: mainMaxY
+        )
+      )
     }
+  }
+
+  private func preferredScreenSnapshot(from snapshots: [ScreenSnapshot])
+    -> ScreenSnapshot?
+  {
+    guard !snapshots.isEmpty else {
+      return nil
+    }
+
+    let mouseLocation: CGPoint = if Thread.isMainThread {
+      NSEvent.mouseLocation
+    } else {
+      DispatchQueue.main.sync {
+        NSEvent.mouseLocation
+      }
+    }
+
+    if let pointerScreen = snapshots.first(where: { snapshot in
+      snapshot.frameAppKit.contains(mouseLocation)
+    }) {
+      return pointerScreen
+    }
+
+    return snapshots.first
   }
 
   private func convertToWindowCoordinates(_ frame: CGRect, mainMaxY: CGFloat)

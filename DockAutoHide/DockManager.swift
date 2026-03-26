@@ -13,6 +13,7 @@ final class DockManager: ObservableObject {
   private let automationService: DockAutomationService
   private let authorizationManager: DockAuthorizationManager
   private let configStore: AppConfigurationStore
+  private let evaluator: DockWindowOverlapEvaluator
   private let engine: SmartPolicyEngine
   private var cancellables = Set<AnyCancellable>()
 
@@ -39,6 +40,7 @@ final class DockManager: ObservableObject {
     self.authorizationManager = authorizationManager
     self.configStore = configStore
     let evaluator = DockWindowOverlapEvaluator(prefsClient: prefsClient)
+    self.evaluator = evaluator
     self.engine = engine ?? SmartPolicyEngine(evaluator: evaluator)
 
     let storedSmartEnabled = configStore.readSmartEnabled() ?? false
@@ -49,6 +51,9 @@ final class DockManager: ObservableObject {
     self.currentAutoHideEnabled = false
     self.lastErrorMessage = nil
     self.authorizationState = authorizationManager.state
+    self.evaluator.isDockAutoHideEnabled = { [weak self] in
+      self?.currentAutoHideEnabled ?? false
+    }
 
     DockLogger.log(
       "Init: smartEnabled=\(smartEnabled), manualAutoHide=\(manualAutoHideEnabled), auth=\(authorizationState.rawValue)"
