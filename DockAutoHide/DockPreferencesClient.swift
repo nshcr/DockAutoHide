@@ -5,41 +5,46 @@ final class DockPreferencesClient {
   private let appID = "com.apple.dock" as CFString
 
   func readOrientation() -> String? {
-    if let value = CFPreferencesCopyValue(
-      "orientation" as CFString,
-      appID,
-      kCFPreferencesCurrentUser,
-      kCFPreferencesAnyHost
-    ) {
-      return value as? String
-    }
-    if let value = CFPreferencesCopyValue(
-      "orientation" as CFString,
-      appID,
-      kCFPreferencesCurrentUser,
-      kCFPreferencesCurrentHost
-    ) {
-      return value as? String
-    }
-    return nil
+    readValue(forKey: "orientation" as CFString) as? String
   }
 
   func readTileSize() -> Double? {
+    guard let value = readValue(forKey: "tilesize" as CFString) else {
+      return nil
+    }
+    return doubleValue(from: value)
+  }
+
+  func readLargeSize() -> Double? {
+    guard let value = readValue(forKey: "largesize" as CFString) else {
+      return nil
+    }
+    return doubleValue(from: value)
+  }
+
+  func readMagnificationEnabled() -> Bool? {
+    guard let value = readValue(forKey: "magnification" as CFString) else {
+      return nil
+    }
+    return boolValue(from: value)
+  }
+
+  private func readValue(forKey key: CFString) -> Any? {
     if let value = CFPreferencesCopyValue(
-      "tilesize" as CFString,
+      key,
       appID,
       kCFPreferencesCurrentUser,
       kCFPreferencesAnyHost
     ) {
-      return doubleValue(from: value)
+      return value
     }
     if let value = CFPreferencesCopyValue(
-      "tilesize" as CFString,
+      key,
       appID,
       kCFPreferencesCurrentUser,
       kCFPreferencesCurrentHost
     ) {
-      return doubleValue(from: value)
+      return value
     }
     return nil
   }
@@ -50,6 +55,16 @@ final class DockPreferencesClient {
     }
     if let doubleValue = value as? Double {
       return doubleValue
+    }
+    return nil
+  }
+
+  private func boolValue(from value: Any) -> Bool? {
+    if let number = value as? NSNumber {
+      return number.boolValue
+    }
+    if let boolValue = value as? Bool {
+      return boolValue
     }
     return nil
   }
