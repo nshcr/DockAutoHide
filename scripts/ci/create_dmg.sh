@@ -15,6 +15,7 @@ STAGING_DIR="$RUNNER_TEMP/staging-${ARCH_LABEL}"
 ci_require_dir "$APP_PATH" "App not found"
 
 mkdir -p "$DIST_DIR"
+rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 
 ditto "$APP_PATH" "$STAGING_DIR/$APP_NAME.app"
