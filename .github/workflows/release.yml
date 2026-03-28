@@ -39,10 +39,24 @@ jobs:
           MARKETING_VERSION_INPUT: ${{ inputs.marketing_version }}
         run: bash scripts/ci/resolve_version.sh
 
+      - name: Validate release options
+        env:
+          SIGN_INPUT: ${{ inputs.sign }}
+          NOTARIZE_INPUT: ${{ inputs.notarize }}
+        run: bash scripts/ci/validate_release_options.sh
+
       - name: Validate immutable release state
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/ci/check_release_publish_state.sh
+
+      - name: Ensure notarization secrets
+        if: ${{ inputs.notarize == true }}
+        env:
+          APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+          APPLE_NOTARIZATION_ISSUER_ID: ${{ secrets.APPLE_NOTARIZATION_ISSUER_ID }}
+          APPLE_NOTARIZATION_PRIVATE_KEY: ${{ secrets.APPLE_NOTARIZATION_PRIVATE_KEY }}
+        run: bash scripts/ci/ensure_notarization_secrets.sh
 
   build:
     name: Build (${{ matrix.arch }})
