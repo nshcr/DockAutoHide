@@ -14,7 +14,7 @@ on:
       notarize:
         description: "Enable notarization step (requires signing)"
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
