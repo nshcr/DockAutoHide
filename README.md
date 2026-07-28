@@ -90,6 +90,20 @@ In short: enabling Screen Recording gives DockAutoHide its best behavior, but le
 
 DockAutoHide performs all processing locally. It does not collect analytics or transmit data over the network.
 
+## Development Checks
+
+Run the geometry and smart-policy lifecycle regressions on macOS with Xcode installed:
+
+```sh
+bash scripts/ci/test_multi_display_overlap.sh
+```
+
+Set `VERBOSE=1` to include decision logs. The standalone test executable uses injected
+window and display snapshots; it does not launch the app or change Dock settings.
+These checks cover display selection, hidden-Dock cache refresh, coordinate handling,
+invalid window records, and policy start/stop behavior. Real multi-display behavior,
+permission handling, and UI responsiveness still require separate app acceptance testing.
+
 ## Contributing & Feedback
 
 Contributions of any kind are very welcome. If you try DockAutoHide, I would love to hear your feedback, bug reports, and suggestions. Even small notes about what feels off or where it fails are valuable.
