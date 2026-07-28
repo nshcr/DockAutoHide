@@ -10,7 +10,7 @@ final class DockManager: ObservableObject {
   @Published private(set) var authorizationState: DockAuthorizationState
 
   private let prefsClient: DockPreferencesClient
-  private let automationService: DockAutomationService
+  private let automationService: DockAutomationControlling
   private let authorizationManager: DockAuthorizationManager
   private let configStore: AppConfigurationStore
   private let evaluator: DockWindowOverlapEvaluator
@@ -30,7 +30,7 @@ final class DockManager: ObservableObject {
 
   init(
     prefsClient: DockPreferencesClient = DockPreferencesClient(),
-    automationService: DockAutomationService = DockAutomationService(),
+    automationService: DockAutomationControlling = DockAutomationService(),
     authorizationManager: DockAuthorizationManager = DockAuthorizationManager(),
     configStore: AppConfigurationStore = AppConfigurationStore(),
     engine: SmartPolicyEngine? = nil
